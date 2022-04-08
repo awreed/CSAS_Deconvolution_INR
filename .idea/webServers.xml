@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="b6418e87-1521-4ffa-803c-ecc5f232807d" name="AGAVE">
+        <fileTransfer accessType="SFTP" host="agave.asu.edu" port="22" sshConfigId="36a1d79e-2074-4997-a35a-932dd6286cd4" sshConfig="awreed@agave.asu.edu:22 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

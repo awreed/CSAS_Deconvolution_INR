@@ -1,0 +1,12 @@
+name: CSAS_INR_Deconv4
+channels:
+  - conda-forge
+  - anaconda
+  - defaults
+dependencies:
+  - opencv
+  - scikit-learn
+  - scipy
+  - matplotlib
+  - pillow
+  - configparser
