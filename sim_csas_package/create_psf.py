@@ -9,11 +9,8 @@ import configparser
 import numpy as np
 
 
-class SimulateMeasurements:
-    def __init__(self, sim_config, sys_config, save_img_dir, save_data_dir):
-        self.sim_config = configparser.ConfigParser()
-        self.sim_config.read(sim_config)
-
+class CreatePSF:
+    def __init__(self, sys_config, save_img_dir, save_data_dir):
         self.sys_config = configparser.ConfigParser()
         self.sys_config.read(sys_config)
 
@@ -28,12 +25,6 @@ class SimulateMeasurements:
 
     def run(self):
         with torch.no_grad():
-            LOAD_IMG_DIR = self.sim_config[C.IO][C.LOAD_IMG_DIR]
-
-            image_names = self.sim_config[C.IO][C.LOAD_IMG_NAMES]
-            image_names = image_names.split(',')
-            image_names = [num.strip() for num in image_names]
-
             f_start = self.sys_config[C.WAVEFORM].getint(C.F_START)
             f_stop = self.sys_config[C.WAVEFORM].getint(C.F_STOP)
             t_start = self.sys_config[C.WAVEFORM].getfloat(C.T_START)
@@ -46,8 +37,6 @@ class SimulateMeasurements:
                                   f_start=f_start, f_stop=f_stop,
                                   t_start=t_start, t_stop=t_stop,
                                   win_ratio=win_ratio)
-
-
 
             theta_start = self.sys_config[C.SAS_GEOMETRY].getint(C.THETA_START)
             theta_stop = self.sys_config[C.SAS_GEOMETRY].getint(C.THETA_STOP)
@@ -73,6 +62,9 @@ class SimulateMeasurements:
             scene_dim_z = [float(num.strip()) for num in scene_dim_z]
 
             pix_dim = self.sys_config[C.SCENE_DIMENSIONS].getint(C.PIX_DIM)
+            pix_dim = pix_dim - 1
+
+            assert pix_dim % 2 == 1, "Pix dimension should be even so that PSF shape is odd"
 
             # define scene dimensions to mimic airsas scene
             RP.define_scene_dimensions(scene_dim_x=[scene_dim_x[0], scene_dim_x[1]],  # meters
@@ -86,41 +78,26 @@ class SimulateMeasurements:
 
             BF = Beamformer(RP=RP, interp='nearest', mp=False, r=100)
 
-            psnr = self.sim_config[C.WAVEFORM_SNR].getfloat(C.PSNR)
+            single_scatterer = torch.zeros((pix_dim, pix_dim))
+            phase = torch.zeros((pix_dim, pix_dim))
+            single_scatterer[int(pix_dim//2), int(pix_dim//2)] = 1
 
-            noise_val = 1/(10**(psnr/10))
-            print("Noise val is", noise_val)
+            single_scatterer = single_scatterer.view(-1)[RP.circle_indeces]
+            phase = phase.view(-1)[RP.circle_indeces]
 
-            assert pix_dim % 2 == 0, "keep size of scene even so PSF is automatically odd"
+            print("Simulating waveforms")
+            wfms = delay_waveforms(RP, RP.pixels_3D_sim, single_scatterer,
+                                   noise=False, noise_std=0., min_dist=RP.min_dist,
+                                   scat_phase=phase)
 
-            for img_index, name in enumerate(image_names):
-                print("Processing image", name)
+            print("Beamforming")
+            complex_bf = BF.beamform(wfms, RP.pixels_3D_bf)
+            complex_bf = complex_bf.detach().cpu().numpy()
 
-                input_img = os.path.join(LOAD_IMG_DIR, name)
-                gt_scatterers = load_img_and_preprocess(input_img, pix_dim)
-                gt_scatterers = gt_scatterers.ravel()[RP.circle_indeces]
-                gt_scatterers = normalize(gt_scatterers)
 
-                imwrite(c2g(gt_scatterers, RP.circle_indeces, pix_dim),
-                        os.path.join(self.save_img_dir, 'gt_' + str(img_index) + '.png'))
+            print("Saving data to", self.save_data_dir)
+            np.save(os.path.join(self.save_data_dir, 'psf' + '.npy'), complex_bf)
 
-                np.save(os.path.join(self.save_data_dir, 'gt' \
-                                     + str(img_index) + '.npy'), gt_scatterers)
-
-                gt_scatterers = torch.from_numpy(gt_scatterers)
-
-                print("Simulating waveforms")
-                wfms = delay_waveforms(RP, RP.pixels_3D_sim, gt_scatterers,
-                                       noise=True, noise_std=noise_val, min_dist=RP.min_dist,
-                                       scat_phase=None)
-
-                print("Beamforming")
-                complex_bf = BF.beamform(wfms, RP.pixels_3D_bf)
-                complex_bf = complex_bf.detach().cpu().numpy()
-
-                print("Saving data to", self.save_data_dir)
-                np.save(os.path.join(self.save_data_dir, 'beamformed_scatterers_' + str(img_index) + '.npy'), complex_bf)
-
-                print("Saving image to", self.save_img_dir)
-                imwrite(c2g(np.absolute(complex_bf), RP.circle_indeces, pix_dim),
-                        os.path.join(self.save_img_dir, 'beamformed_scatterers_' + str(img_index) + '.png'))
+            print("Saving image to", self.save_img_dir)
+            imwrite(c2g(np.absolute(complex_bf), RP.circle_indeces, pix_dim),
+                    os.path.join(self.save_img_dir, 'psf' + '.png'))

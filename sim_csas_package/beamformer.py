@@ -23,6 +23,7 @@ class Beamformer:
         torch.multiprocessing.set_start_method('spawn', force=True)
 
     def beamform(self, wfms, pixels, group_delay=0, temps=None):
+        print("Beamforming")
         self.wfms = wfms.detach().cpu()
         num_wfms = self.wfms.shape[0]
       
@@ -40,10 +41,8 @@ class Beamformer:
         self.temps = temps
 
         if self.mp:
-            print("Beamforming mp")
             scene = self.beamform_mp()
         else:
-            print("Beamforming no mp")
             scene = self.beamform_no_mp()
 
         return scene

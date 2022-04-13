@@ -142,6 +142,10 @@ class RenderParameters:
           print("using the analytic transmit waveform")
           times = np.linspace(self.t_start, self.t_stop - 1 / self.Fs, num=int((self.t_stop - self.t_start) * self.Fs))
           LFM = scipy.signal.chirp(times, self.f_start, self.t_stop, self.f_stop)  # Generate LFM chirp
+
+          tuk_win = scipy.signal.windows.tukey(len(times), self.win_ratio)
+          LFM = LFM*tuk_win
+
           ind1 = 0  # Not supporting staring time other than zero atm
           ind2 = ind1 + len(LFM)
             

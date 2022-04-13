@@ -37,13 +37,12 @@ def replica_correlate_torch(x, kernel):
 def delay_waveforms(RP, ps, amplitudes, noise=False, noise_std=.01, temps=None,
     min_dist=0.0, scat_phase=None):
 
-    amplitudes_stacked = amplitudes.squeeze().view(-1)
-    print(amplitudes_stacked.shape)
+    amplitudes = amplitudes.squeeze().view(-1)
 
     if scat_phase is not None:
       scat_p = scat_phase.squeeze().view(-1)
     else:
-      scat_p = torch.zeros_like(amplitudes_stacked).to(amplitudes_stacked.device)
+      scat_p = torch.zeros_like(amplitudes).to(amplitudes.device)
       
     scat_p = scat_p.float()
     ps_term = torch.exp(torch.complex(real=torch.tensor([0.0]), imag=-1*scat_p))
@@ -85,7 +84,7 @@ def delay_waveforms(RP, ps, amplitudes, noise=False, noise_std=.01, temps=None,
         tsd_fft = RP.pulse_fft_kernel[None, :] * pr
         tsd = torch.fft.ifft(tsd_fft, dim=1)
         
-        tsd_scaled = amplitudes_stacked[:, None] * tsd.real
+        tsd_scaled = amplitudes[:, None] * tsd.real
         
         if noise:
             ps_noise = torch.normal(0, noise_std, size=tsd_scaled.shape).to(ps.device)
