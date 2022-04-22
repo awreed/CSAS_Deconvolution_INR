@@ -50,7 +50,6 @@ class BremenAlg:
     a0n = c2g(a0n, self.RP.circle_indeces, gt_img.shape[0])
     a0n = torch.from_numpy(a0n).to(self.RP.dev)
 
-    #r = psf / np.sqrt(self.energy(psf))
     r = psf
     r = r.real
 
@@ -80,12 +79,10 @@ class BremenAlg:
         ...], padding='same').squeeze()
 
       a_i = a_i.view(-1)[self.RP.circle_indeces]
-      #a_i = scipy.signal.convolve2d(l_i, r, mode='same')
       a_i = a_i / np.sqrt(self.energy(a_i))
 
       # convergence factor
       p_i = self.xenergy(a0n, a_i)
-      #p_i = 1
 
       # observation correction term
       c_i = a0n - p_i*a_i
@@ -102,16 +99,12 @@ class BremenAlg:
 
       # If simulated data
       if sim:
-        
         scene = np.sqrt(l_i.detach().cpu().numpy()**2)
         images.append(scene)
-        #scene = scene / scene.max()
-        #scene = drc(scene, np.median(scene), 0.2)
+
         if crop_size:
           scene = scene[crop_size//2:-crop_size//2, crop_size//2:-crop_size//2]
 
-        #imwrite(scene, 'plots_200/l_i_' + str(i) + '.png')
-        #save_sas_plot(scene, os.path.join(save_name, 'l_i_' + str(i) + '.png'))
         psnr = peak_signal_noise_ratio(normalize(scene),\
             normalize(gt_img))
         ssim = structural_similarity(normalize(scene),\

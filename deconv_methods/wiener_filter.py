@@ -1,11 +1,8 @@
 import torch
 import numpy as np
-from models import MLP_FF2D_MLP, FourierFeaturesVector
-import collections
-from utils import L1_reg, L2_reg, grad_reg, TV, save_img, normalize, imwrite, save_sas_plot, g2c, c2g
+from sim_csas_package.utils import L1_reg, L2_reg, grad_reg, TV, save_img, normalize, imwrite, save_sas_plot, g2c, c2g
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 import os
-from skimage import restoration
 from numpy.fft import fft2, ifft2
 import lpips
 
@@ -55,21 +52,14 @@ class WienerDeconv:
       img = img.squeeze()
 
       psf_size = psf.shape[0]
-      #if psf_size % 2 == 0:
-      #  raise Exception('check padding')
-      
 
       pad_w = np.abs((psf_size - img_size))
       psf = np.pad(psf, ((0, pad_w), (0, pad_w)), mode='constant')
 
       psf = psf.ravel()[self.RP.circle_indeces]
 
-    #snrs = np.linspace(0, .01, 100)
     snrs = np.logspace(-7, 0, 100)
     print(snrs)
-
-    #scale = np.sqrt(1 / np.max(np.absolute(img)))
-    #img = scale * img
 
     img = img / np.sqrt(self.energy(img))
 

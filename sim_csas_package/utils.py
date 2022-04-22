@@ -7,6 +7,41 @@ import math
 import cv2
 from PIL import Image
 import torch
+import constants.constants as C
+
+def process_sys_config(sys_config):
+    A = {}
+
+    A['f_start'] = sys_config[C.WAVEFORM].getint(C.F_START)
+    A['f_stop'] = sys_config[C.WAVEFORM].getint(C.F_STOP)
+    A['t_start'] = sys_config[C.WAVEFORM].getfloat(C.T_START)
+    A['t_stop'] = sys_config[C.WAVEFORM].getfloat(C.T_STOP)
+    A['win_ratio'] = sys_config[C.WAVEFORM].getfloat(C.TUKEY_RATIO)
+    A['fs'] = sys_config[C.SIGNAL_PROCESSING].getint(C.FS)
+    A['c'] = sys_config[C.SIGNAL_PROCESSING].getint(C.C)
+
+    A['theta_start'] = sys_config[C.SAS_GEOMETRY].getint(C.THETA_START)
+    A['theta_stop'] = sys_config[C.SAS_GEOMETRY].getint(C.THETA_STOP)
+    A['theta_step'] = sys_config[C.SAS_GEOMETRY].getint(C.THETA_STEP)
+    A['radius'] = sys_config[C.SAS_GEOMETRY].getfloat(C.R)
+    A['Z_TX'] = sys_config[C.SAS_GEOMETRY].getfloat(C.Z_TX)
+    A['Z_RX'] = sys_config[C.SAS_GEOMETRY].getfloat(C.Z_RX)
+
+    A['scene_dim_x'] = sys_config[C.SCENE_DIMENSIONS][C.DIM_X]
+    A['scene_dim_x'] = A['scene_dim_x'].split(',')
+    A['scene_dim_x'] = [float(num.strip()) for num in A['scene_dim_x']]
+
+    A['scene_dim_y'] = sys_config[C.SCENE_DIMENSIONS][C.DIM_Y]
+    A['scene_dim_y'] = A['scene_dim_y'].split(',')
+    A['scene_dim_y'] = [float(num.strip()) for num in A['scene_dim_y']]
+
+    A['scene_dim_z'] = sys_config[C.SCENE_DIMENSIONS][C.DIM_Z]
+    A['scene_dim_z'] = A['scene_dim_z'].split(',')
+    A['scene_dim_z'] = [float(num.strip()) for num in A['scene_dim_z']]
+
+    A['pix_dim'] = sys_config[C.SCENE_DIMENSIONS].getint(C.PIX_DIM)
+
+    return A
 
 def g2c(grid):
   grid = grid.squeeze()
@@ -49,13 +84,6 @@ def save_sas_plot(img, path, x_size=0.2, y_size=0.2, log=False):
   plt.show()
   plt.savefig(path)
 
-
-def save_plot(img, path):
-  plt.figure()
-  plt.imshow(img)
-  plt.colorbar()
-  plt.savefig(path)
-  plt.close('all')
 
 # Crops the PSF down to smaller size based off desired amount of energy
 # (thresh)
@@ -110,25 +138,6 @@ def drc(img, med, des_med):
   fp = (des_med - med * des_med)/(med - med * des_med)
   return (img*fp)/(fp*img-img+1)
 
-def conv_fourier(psf, gt_scatterers):
-  psf_fft = torch.fft.fft2(psf)
-  gt_scatterers_fft = torch.fft.fft2(gt_scatterers)
-  fft_conv_scene = gt_scatterers_fft*psf_fft
-  ifft_conv_scene = torch.fft.ifft2(fft_conv_scene).squeeze()
-  ifft_conv_scene = torch.fft.ifftshift(ifft_conv_scene)
-  return ifft_conv_scene
-
-def deconv_fourier(psf, bf):
-  psf_fft = torch.fft.fft2(psf)
-  bf_fft = torch.fft.fft2(bf)
-  deconv_fft = bf_fft/psf_fft
-  deconv = torch.fft.ifftshift(torch.fft.ifft2(deconv_fft).squeeze())
-  return deconv
-
-def normalize_complex_arr(a):
-  a_oo = torch.complex(real=(a.real - a.real.min()), imag=(a.imag
-    - a.imag.min()))
-  return a_oo/torch.abs(a_oo).max()
 
 def process_bf_files(direc):
     coord_file = 'Coordinates.csv'
@@ -268,26 +277,3 @@ def imwrite(img, path):
   img = Image.fromarray(img)
   img.save(path)
 
-                                                                                
-def save_img(img, path, size, title='Plot', xmin=-.2, xmax=.2, ymin=-.2, ymax=.2):           
-    fig, ax = plt.subplots()                                                    
-    im_h = ax.imshow(img)                                                       
-    #im_h.set_clim(vmin=-60, vmax=0)
-    labels = [item.get_text() for item in ax.get_xticklabels()]                 
-    num_labels = len(labels)                                                    
-    label_pos = np.linspace(0, size, 11, endpoint=True)                          
-    xlabels = np.linspace(xmin, xmax, len(label_pos), endpoint=True)            
-    xlabels = ["{:.2f}".format(x) for x in xlabels]                             
-    ylabels = np.linspace(ymin, ymax, len(label_pos), endpoint=True)            
-    ylabels = ["{:.2f}".format(y) for y in ylabels]                             
-    ylabels.reverse()                                                           
-    ax.set_xticks(label_pos)                                                    
-    ax.set_yticks(label_pos)                                                    
-    ax.set_xticklabels(xlabels)                                                 
-    ax.set_yticklabels(ylabels)                                                 
-    ax.set_xlabel('meters')                                                     
-    ax.set_ylabel('meters')                                                     
-    ax.set_title(title)                                                         
-    fig.colorbar(im_h)                                                          
-    
-    plt.savefig(path)

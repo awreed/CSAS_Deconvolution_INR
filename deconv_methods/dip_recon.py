@@ -1,20 +1,13 @@
 import torch
 import numpy as np
-from models import MLP_FF2D_MLP, FourierFeaturesVector
 import collections
-from utils import L1_reg, L2_reg, grad_reg, TV, save_img, normalize, imwrite, save_sas_plot
+from sim_csas_package.utils import L1_reg, L2_reg, grad_reg, TV, normalize, save_sas_plot
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 import os
-import skimage.transform
-import cv2
 import lpips
-from dip_models import *
-from dip_utils import *
-import pdb
-from dip_utils.common_utils import *
+from deconv_methods.dip_dependencies.dip_models import *
 
-
-class DIP_Recon:
+class DIPRecon:
   def __init__(self, RP):
     self.RP = RP
 
@@ -23,7 +16,6 @@ class DIP_Recon:
 
   def energy(self, x):
     return torch.sum(x.abs()**2)
-
 
   def recon(self, max_len, max_iter, reg, reg_weight, save_every, sim, psf, crop_size, gt_img, img,
       save_name):
@@ -50,18 +42,11 @@ class DIP_Recon:
 
     GRID_SIZE = self.RP.pix_dim_bf[0]
 
-    #img = torch.from_numpy(img).to(self.RP.dev)
-    #scale = torch.sqrt(1 / torch.max(img.abs()))
-    #img = scale * img
-    #img = img.detach().cpu().numpy()
-
     psf = torch.from_numpy(psf).to(self.RP.dev)[None, None, ...]
     y = torch.from_numpy(img).to(self.RP.dev)
 
-    #psf = psf / torch.sqrt(self.energy(psf))
     y = y / torch.sqrt(self.energy(y))
 
-    
     MAX_LEN = max_len
     d = collections.deque(maxlen=MAX_LEN)
     ssim_opt = collections.deque(maxlen=MAX_LEN)
@@ -72,7 +57,6 @@ class DIP_Recon:
     pw = 1
 
     loss_fn_alex = lpips.LPIPS(net='alex').double().to(self.RP.dev)
-
 
     #### Initialize DIP model ####
     weight = 0.0
