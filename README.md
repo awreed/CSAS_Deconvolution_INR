@@ -8,16 +8,19 @@
 2. Install the python virtual environment containing the necessary packages using `conda env create -f environ.yml`.
 3. After installing, enter the virtual environment with `conda activate CSAS_INR_Deconv`.
 4. Finally, install PyTorch using from command line like `conda install pytorch torchvision cudatoolkit=10.2 -c pytorch`. 
-Visit `https://pytorch.org/` for more details. 
+Visit `https://pytorch.org/` for more details.
 
-## Running the Deconvolution Simulation Pipeline (Coming 4/29/22)
+
+
+## Deconvolving Simulated data 
 The `example_sim_deconv_pipeline/deconvolve_simulated_scene.py` script creates two sets of simulated CSAS measurements,
 reconstructs the measurements using DAS, and then deconvolves the images using our INR approach and baselines discussed 
-in the paper. The simulation parameters are easily modified by editing the `example_sim_deconv_pipeline/sim_config.ini` 
-file.
+in the paper. The simulation and geometry parameters are modified by editing using the 
+`example_sim_deconv_pipeline/system_parameters.ini` and `example_sim_deconv_pipeline/simulation.ini`
+files. The deconvolution parameters can be edited using the `example_sim_deconv_pipeline/deconv.ini`. All `.ini` files
+are commented to provide instructions for use. The output 
+of the deconvolution methods are saved in the `deconv_dir` directory. 
 
-## Beamforming the AirSAS data (Coming 4/29/22)
 
-## Deconvolving the simulated data (Coming 4/29/22)
+## Deconvolving AirSAS data (Coming 5/6/22)
 
-## Deconvolving the AirSAS data (Coming 4/29/22)

@@ -14,12 +14,9 @@ from deconv_methods.dip_recon import DIPRecon
 
 
 class DeconvMethods:
-    def __init__(self, deconv_config, sys_config, to_be_deconvolved, deconv_dir):
+    def  __init__(self, deconv_config, to_be_deconvolved, deconv_dir, device=None, circular=False):
         self.all_methods = [C.INR, C.GD, C.GD_TV, C.GD_GRAD_REG, C.DIP, C.WIENER, C.BREMEN]
         self.use_methods = []
-
-        self.sys_config = configparser.ConfigParser()
-        self.sys_config.read(sys_config)
 
         self.deconv_config = configparser.ConfigParser()
         self.deconv_config.read(deconv_config)
@@ -30,39 +27,24 @@ class DeconvMethods:
             self.dev = 'cpu'
             print("Did not find gpu so using", self.dev)
 
-        with torch.no_grad():
-            # Process the system config init file
-            sys = process_sys_config(self.sys_config)
-
-            self.RP = RenderParameters(device=self.dev, Fs=sys['fs'], c=sys['c'],
-                                  f_start=sys['f_start'], f_stop=sys['f_stop'],
-                                  t_start=sys['t_start'], t_stop=sys['t_stop'],
-                                  win_ratio=sys['win_ratio'])
-
-            # define transducer positions relative to the scene
-            self.RP.define_transducer_pos(theta_start=sys['theta_start'], theta_stop=sys['theta_stop'],
-                                     theta_step=sys['theta_step'], r=sys['radius'], z_TX=sys['Z_TX'],
-                                     z_RX=sys['Z_RX'])
-
-            pix_dim = sys['pix_dim']
-            assert pix_dim % 2 == 0, "keep size of scene even so PSF is automatically odd"
-
-            # define scene dimensions to mimic airsas scene
-            self.RP.define_scene_dimensions(scene_dim_x=[sys['scene_dim_x'][0], sys['scene_dim_x'][1]],  # meters
-                                       scene_dim_y=[sys['scene_dim_y'][0], sys['scene_dim_y'][1]],  # meters
-                                       scene_dim_z=[sys['scene_dim_z'][0], sys['scene_dim_z'][1]],  # set z to 0
-                                       pix_dim_sim=[pix_dim, pix_dim, 1],  # define simulated and BF dimensions
-                                       pix_dim_bf=[pix_dim, pix_dim, 1])
-
         self.to_be_deconvolved = to_be_deconvolved
         self.deconv_dir = deconv_dir
+
+        if device is None:
+            self.device = 'cuda:0' if torch.cuda.isavailable() else 'cpu'
+        else:
+            self.device = device
+
+        self.circular = circular
+
         self.process_deconv_config()
+
 
     # Setup a method to be used for deconvolution
     def add_method(self, name):
         assert name in self.all_methods
         if name == C.INR:
-            INR = INRRecon(self.RP)
+            INR = INRRecon(self.device, self.circular)
             kappa = self.deconv_config[name].getfloat(C.KAPPA)
             nf = self.deconv_config[name].getint(C.NF)
             lr = self.deconv_config[name].getfloat(C.LR)
@@ -74,7 +56,7 @@ class DeconvMethods:
             self.use_methods.append(meth)
 
         elif name == C.GD:
-            GD = GradDescRecon(self.RP)
+            GD = GradDescRecon(self.device, self.circular)
             lr = self.deconv_config[name].getfloat(C.LR)
             momentum = self.deconv_config[name].getfloat(C.MOMENTUM)
             max_iter = self.deconv_config[name].getint(C.MAX_ITER)
@@ -85,29 +67,58 @@ class DeconvMethods:
             self.use_methods.append(meth)
 
         elif name == C.GD_TV or name == C.GD_GRAD_REG:
-            GD = GradDescRecon(self.RP)
+            GD = GradDescRecon(self.device, self.circular)
             lr = self.deconv_config[name].getfloat(C.LR)
             momentum = self.deconv_config[name].getfloat(C.MOMENTUM)
             max_iter = self.deconv_config[name].getint(C.MAX_ITER)
             save_every = self.deconv_config[name].getint(C.SAVE_EVERY)
-            reg_weight = self.deconv_config[name].getyfloat(C.REG_WEIGHT)
+            reg_weight = self.deconv_config[name].getfloat(C.REG_WEIGHT)
             reg = self.deconv_config[name][C.REG]
 
             meth = {'name': name,
                     'func': partial(GD.recon, lr, momentum, reg, reg_weight, max_iter, save_every)}
             self.use_methods.append(meth)
 
+        elif name == C.DIP:
+            DIP = DIPRecon(self.device, self.circular)
+            lr = self.deconv_config[name].getfloat(C.LR)
+            max_iter = self.deconv_config[name].getint(C.MAX_ITER)
+            save_every = self.deconv_config[name].getint(C.SAVE_EVERY)
+
+            meth = {'name': name,
+                    'func': partial(DIP.recon, lr, max_iter, save_every)}
+            self.use_methods.append(meth)
+
+        elif name == C.WIENER:
+            Wiener = WienerDeconv(self.device, self.circular)
+            log_min = self.deconv_config[name].getfloat(C.MIN_LOG)
+            log_max = self.deconv_config[name].getfloat(C.MAX_LOG)
+            num_log_space = self.deconv_config[name].getint(C.NUM_LOG_SPACE)
+
+            meth = {'name': name,
+                    'func': partial(Wiener.recon, log_min, log_max, num_log_space)}
+            self.use_methods.append(meth)
+
+        elif name == C.BREMEN:
+            Bremen = BremenAlg(self.device, self.circular)
+            max_iter = self.deconv_config[name].getint(C.MAX_ITER)
+            save_every = self.deconv_config[name].getint(C.SAVE_EVERY)
+
+            meth = {'name': name,
+                    'func': partial(Bremen.recon, max_iter, save_every)}
+            self.use_methods.append(meth)
 
     # Add all the deconv methods from the config file
     def process_deconv_config(self):
         for key in self.deconv_config.keys():
             if key in self.all_methods:
-                if self.deconv_config[key].getboolean(C.USE):
-                    self.add_method(key)
+                if self.deconv_config[key] == 'DEFAULT':
+                    continue
+                print("Adding", key)
+                self.add_method(key)
             else:
                 print("Method name not recognized in .ini file. User provided", key,
-                      "but possible methods are", self.all_methods)
-
+                    "but possible methods are", self.all_methods)
 
     # Run all the deconv methods on the provided data
     def run_all_methods(self):
@@ -121,16 +132,22 @@ class DeconvMethods:
             assert task['gt'].ndim == 2, "Ground truth image input should be two dimensions (H, W)"
 
             if task['gt'] is not None:
-                assert task['scene'].shape == task['gt'].shape, "Provided ground truth image should be same dimensions as " \
-                                                                "DAS reconstructed image"
-
-            # Deconv methods expect DAS vector to be 1D
-            task['scene'] = task['scene'].ravel()[self.RP.circle_indeces]
+                assert task['scene'].shape == task['gt'].shape, "Provided ground truth image should be same" \
+                                                                " dimensions as DAS reconstructed image"
+            if self.circular:
+                assert task['scene'].shape[0] == task['scene'].shape[1], "DAS Input must be square (H == W) " \
+                                                                         "to perform circular crop"
+                assert task['gt'].shape[0] == task['gt'].shape[1], "GT must be square (H == W) " \
+                                                                   "to perform circular crop"
 
             # loop over all methods to deconvolve with
             for meth in self.use_methods:
-                images, psnrs, ssims, lpips = meth['func'](task['scene'], task['psf'], task['gt'], save_dir)
-                np.save(os.path.join(save_dir, 'final_deconv.npy'), images[-1])
-                np.save(os.path.join(save_dir, 'psnrs.npy'), np.asarray(psnrs))
-                np.save(os.path.join(save_dir, 'ssims.npy'), np.asarray(ssims))
-                np.save(os.path.join(save_dir, 'lpips.npy'), np.asarray(lpips))
+                meth_save_dir = os.path.join(save_dir, meth['name'])
+                os.makedirs(meth_save_dir, exist_ok=True)
+                print("Running", meth['name'], "on image", str(i))
+
+                images, psnrs, ssims, lpips = meth['func'](task['scene'], task['psf'], task['gt'], meth_save_dir)
+                np.save(os.path.join(meth_save_dir, 'final_deconv.npy'), images[-1])
+                np.save(os.path.join(meth_save_dir, 'psnrs.npy'), np.asarray(psnrs))
+                np.save(os.path.join(meth_save_dir, 'ssims.npy'), np.asarray(ssims))
+                np.save(os.path.join(meth_save_dir, 'lpips.npy'), np.asarray(lpips))

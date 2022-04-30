@@ -9,23 +9,22 @@ class swish(nn.Module):
 
 
 class MLP_FF2D_MLP(nn.Module):
-  def __init__(self, RP=None, out_ch=1, act='none'):
+  def __init__(self, nf=128, out_ch=1, act='none'):
     super(MLP_FF2D_MLP, self).__init__()
-    self.opt = RP
     self.main = nn.Sequential(
-        nn.Linear(self.opt.nf*2, self.opt.nf*2, bias=False),
+        nn.Linear(nf*2, nf*2, bias=False),
         nn.ReLU(),
-        nn.Linear(self.opt.nf*2, self.opt.nf*2, bias=False),
+        nn.Linear(nf*2, nf*2, bias=False),
         nn.ReLU(),
-        nn.Linear(self.opt.nf*2, self.opt.nf*2, bias=False),
+        nn.Linear(nf*2, nf*2, bias=False),
         nn.ReLU(),
-        nn.Linear(self.opt.nf*2, self.opt.nf*2, bias=False),
+        nn.Linear(nf*2, nf*2, bias=False),
         nn.ReLU(),
-        nn.Linear(self.opt.nf*2, self.opt.nf*2, bias=False),
+        nn.Linear(nf*2, nf*2, bias=False),
         nn.ReLU(),
-        nn.Linear(self.opt.nf*2, self.opt.nf*2, bias=False),
+        nn.Linear(nf*2, nf*2, bias=False),
         nn.ReLU(),
-        nn.Linear(self.opt.nf*2, out_ch, bias=True)
+        nn.Linear(nf*2, out_ch, bias=True)
     )
     self.act_fun = None
 

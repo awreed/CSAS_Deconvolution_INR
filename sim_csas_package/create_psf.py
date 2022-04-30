@@ -73,8 +73,8 @@ class CreatePSF:
 
 
             print("Saving data to", self.save_data_dir)
-            np.save(os.path.join(self.save_data_dir, 'psf' + '.npy'), c2g(complex_bf, RP.circle_indeces, pix_dim))
+            np.save(os.path.join(self.save_data_dir, 'psf' + '.npy'), c2g(complex_bf, RP.circle_indeces, pix_dim, pix_dim))
 
             print("Saving image to", self.save_img_dir)
-            save_sas_plot(c2g(np.absolute(complex_bf), RP.circle_indeces, pix_dim),
+            save_sas_plot(c2g(np.absolute(complex_bf), RP.circle_indeces, pix_dim, pix_dim),
                     os.path.join(self.save_img_dir, 'psf' + '.png'))

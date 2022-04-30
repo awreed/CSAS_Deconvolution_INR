@@ -1,15 +1,16 @@
 import torch
 import numpy as np
-from sim_csas_package.utils import L1_reg, L2_reg, grad_reg, TV, save_img, normalize, imwrite, save_sas_plot, g2c, c2g
+from sim_csas_package.utils import normalize,  save_sas_plot, g2c
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 import os
 from numpy.fft import fft2, ifft2
 import lpips
 
-
 class WienerDeconv:
-  def __init__(self, RP):
-    self.RP = RP
+  def __init__(self, device, circular):
+    self.device = device
+    self.circular = circular
+    self.ind = None
 
   def norm(self, x):
     return 2*((x-x.min())/(x.max() - x.min())) - 1
@@ -17,7 +18,6 @@ class WienerDeconv:
   def energy(self, x):
     return np.sum(np.absolute(x)**2)
 
-  
   def wiener_filter2D(self, img, kernel, K):
     #kernel /= np.sum(kernel)
     dummy = np.copy(img)
@@ -37,37 +37,33 @@ class WienerDeconv:
     dummy = np.abs(np.fft.fftshift(np.fft.ifft(dummy)))
     return dummy
 
-
-  def recon(self, max_len, sim, psf, crop_size, gt_img, img, save_name):
+  def recon(self, log_min, log_max, num_log_space, img, psf, gt_img, save_name):
     assert img.dtype == np.complex128
     assert psf.dtype == np.complex128
 
-    if crop_size:
-      gt_img = gt_img[crop_size//2:-crop_size//2, crop_size//2:-crop_size//2]
-
-    img_size = gt_img.shape[0]
+    x_shape, y_shape = gt_img.shape[0], gt_img.shape[1]
 
     if psf.shape != img.shape:
+      print("Wiener filter padding code might be wrong for non-square PSFs...")
       psf = psf.squeeze()
       img = img.squeeze()
 
       psf_size = psf.shape[0]
 
-      pad_w = np.abs((psf_size - img_size))
-      psf = np.pad(psf, ((0, pad_w), (0, pad_w)), mode='constant')
+      pad_w = np.abs((psf_size - x_shape))
+      pad_h = np.abs((psf_size - y_shape))
+      psf = np.pad(psf, ((0, pad_w), (0, pad_h)), mode='constant')
 
-      psf = psf.ravel()[self.RP.circle_indeces]
-
-    snrs = np.logspace(-7, 0, 100)
-    print(snrs)
+    noise_suppresion_const = np.logspace(log_min, log_max, num_log_space)
 
     img = img / np.sqrt(self.energy(img))
 
-    img = c2g(img, self.RP.circle_indeces, img_size)
-    psf = c2g(psf, self.RP.circle_indeces, img_size)
-    mask = np.zeros((img_size, img_size))
-    mask.ravel()[self.RP.circle_indeces] = 1
-    mask = mask.reshape(img_size, img_size)
+    if self.circular:
+      mask = np.zeros((x_shape, y_shape))
+      _, ind = g2c(mask)
+      self.ind = ind
+      mask.ravel()[self.ind] = 1
+      mask = mask.reshape(x_shape, y_shape)
 
     psf_new = np.zeros_like(psf, dtype=np.complex128)
     psf_new.real = psf.real
@@ -75,62 +71,42 @@ class WienerDeconv:
 
     psf_new = psf_new / np.sqrt(self.energy(psf_new))
 
-    if sim:
+    psnrs = []
+    ssims = []
+    perceps = []
+    images = []
 
-      loss_fn_alex = lpips.LPIPS(net='alex').double().to(self.RP.dev)
+    loss_fn_alex = lpips.LPIPS(net='alex').double().to(self.device)
 
-      psnrs = []
-      ssims = []
-      perceps = []
-      images = []
+    for i, noise in enumerate(noise_suppresion_const):
+      deconv_scene = self.wiener_filter2D(img, psf_new, noise)
+      if self.circular:
+        deconv_scene = mask*deconv_scene
 
-      for i, snr in enumerate(snrs):
-        #print(i)
-        deconv = self.wiener_filter2D(img, psf_new, snr)
-        deconv = mask*deconv
+      images.append(deconv_scene)
 
-        if crop_size:
-          deconv = deconv[crop_size//2:-crop_size//2, crop_size//2:
-              -crop_size//2]
+      if gt_img is not None:
 
-        psnr = peak_signal_noise_ratio(normalize(deconv), normalize(gt_img))
-        ssim = structural_similarity(normalize(deconv), normalize(gt_img))
-
-      
-
+        psnr_est = peak_signal_noise_ratio(normalize(gt_img),
+                                           normalize(deconv_scene))
+        ssim_est = structural_similarity(normalize(gt_img),
+                                         normalize(deconv_scene))
         gt = torch.from_numpy(self.norm(gt_img.squeeze()))[None, None,
-            ...].repeat(1, 3, 1, 1).to(self.RP.dev)
-        est = torch.from_numpy(self.norm(deconv.squeeze()))[None, None,
-            ...].repeat(1, 3, 1, 1).to(self.RP.dev)
-
+                                                           ...].repeat(1, 3, 1, 1).to(self.device)
+        est = torch.from_numpy(self.norm(deconv_scene.squeeze()))[None, None,
+                                                                  ...].repeat(1, 3, 1, 1).to(self.device)
         percep = loss_fn_alex(gt, est).item()
 
-        psnrs.append(psnr)
-        ssims.append(ssim)
+        psnrs.append(psnr_est)
+        ssims.append(ssim_est)
         perceps.append(percep)
-        images.append(deconv)
 
-        #save_sas_plot(deconv, os.path.join(save_name, str(i) + '.png'))
+        print("PSNR EST:", psnr_est, "SSIM:", ssim_est, "Percep:", percep)
 
-        #print("PSNR:", psnr, "SSIM", ssim, "Percep", percep, "Noise", i, "/",
-        #    len(snrs))
+      save_sas_plot(deconv_scene, os.path.join(save_name, "deconv_img_" + str(i) + '.png'))
+      np.save(os.path.join(save_name, "deconv_img_" + str(i) + '.npy'), deconv_scene)
 
-      val = max(psnrs)
-      max_psnr = psnrs[psnrs.index(val)]
-      max_ssim = ssims[psnrs.index(val)]
-      max_percep = perceps[psnrs.index(val)]
-      deconv = images[psnrs.index(val)]
-
-      return max_psnr, max_ssim, max_percep, normalize(deconv)
-    
-    else:
-      for i, snr in enumerate(snrs):
-        deconv = self.wiener_filter2D(img, psf_new, snr)
-        deconv = mask*deconv
-        save_sas_plot(deconv, os.path.join(save_name, str(i) + '.png'))
-        np.save(os.path.join(save_name, str(i) + '.npy'), deconv)
-
-      return deconv
+    return images, psnrs, ssims, perceps
 
 
 

@@ -76,11 +76,11 @@ class SimulateMeasurements:
                 gt_scatterers = gt_scatterers.ravel()[RP.circle_indeces]
                 gt_scatterers = normalize(gt_scatterers)
 
-                save_sas_plot(c2g(gt_scatterers, RP.circle_indeces, pix_dim),
+                save_sas_plot(c2g(gt_scatterers, RP.circle_indeces, pix_dim, pix_dim),
                         os.path.join(self.save_img_dir, 'gt_' + str(img_index) + '.png'))
 
                 np.save(os.path.join(self.save_data_dir, 'gt' \
-                                     + str(img_index) + '.npy'), c2g(gt_scatterers, RP.circle_indeces, pix_dim))
+                                     + str(img_index) + '.npy'), c2g(gt_scatterers, RP.circle_indeces, pix_dim, pix_dim))
 
                 gt_scatterers = torch.from_numpy(gt_scatterers)
 
@@ -95,8 +95,8 @@ class SimulateMeasurements:
 
                 print("Saving data to", self.save_data_dir)
                 np.save(os.path.join(self.save_data_dir, 'beamformed_scatterers_' + str(img_index) + '.npy'),
-                        c2g(complex_bf, RP.circle_indeces, pix_dim))
+                        c2g(complex_bf, RP.circle_indeces, pix_dim, pix_dim))
 
                 print("Saving image to", self.save_img_dir)
-                save_sas_plot(c2g(np.absolute(complex_bf), RP.circle_indeces, pix_dim),
+                save_sas_plot(c2g(np.absolute(complex_bf), RP.circle_indeces, pix_dim, pix_dim),
                         os.path.join(self.save_img_dir, 'beamformed_scatterers_' + str(img_index) + '.png'))

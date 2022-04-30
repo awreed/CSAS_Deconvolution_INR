@@ -47,7 +47,7 @@ MOMENTUM = 'MOMENTUM'
 
 GD = 'GD'
 
-GD_TV = 'GD'
+GD_TV = 'GD_TV'
 REG = 'REG'
 REG_WEIGHT = 'REG_WEIGHT'
 

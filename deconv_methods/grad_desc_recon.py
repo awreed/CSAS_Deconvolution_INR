@@ -1,14 +1,15 @@
 import torch
 import numpy as np
-from sim_csas_package.utils import grad_reg, TV, normalize, save_sas_plot, c2g
+from sim_csas_package.utils import grad_reg, TV, normalize, save_sas_plot, c2g, g2c
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 import os
 import lpips
 
 
 class GradDescRecon:
-    def __init__(self, RP):
-        self.RP = RP
+    def __init__(self, device, circular):
+        self.device = device
+        self.circular = circular
 
     def norm(self, x):
         return 2 * ((x - x.min()) / (x.max() - x.min())) - 1
@@ -25,33 +26,44 @@ class GradDescRecon:
         reg_fn = None
 
         if reg == 'none':
-            reg_fn = lambda x: torch.tensor([0]).to(self.RP.dev).double()
+            reg_fn = lambda x: torch.tensor([0]).to(self.device).double()
         elif reg == 'grad_reg':
             reg_fn = grad_reg
         elif reg == 'tv':
             reg_fn = TV
 
-        GRID_SIZE = self.RP.pix_dim_bf[0]
+        if self.circular:
+            assert img.shape[0] == img.shape[1], "Image must be square (H == W) to do circular reconstruction."
+            _, ind = g2c(img)
+            img = img.ravel()[ind]
+            self.ind = ind
+        else:
+            img = img.ravel()
 
-        psf = torch.from_numpy(psf).to(self.RP.dev)[None, None, ...]
-        y = torch.from_numpy(img).to(self.RP.dev)
-        y = y / torch.sqrt(self.energy(y))
+        x_shape, y_shape = gt_img.shape[0], gt_img.shape[1]
 
-        x = np.linspace(0, .1, GRID_SIZE, endpoint=True)
-        x = np.stack(np.meshgrid(x, x), axis=-1)
+        psf = torch.from_numpy(psf).to(self.device)[None, None, ...]
+        psf = psf / torch.sqrt(self.energy(psf))
 
-        x = torch.from_numpy(x).to(self.RP.dev).double()
+        target = torch.from_numpy(img).to(self.device)
+        target = target / torch.sqrt(self.energy(target))
 
-        loss_fn_alex = lpips.LPIPS(net='alex').double().to(self.RP.dev)
+        x = np.linspace(0, 1., x_shape, endpoint=True)
+        y = np.linspace(0, 1., y_shape, endpoint=True)
+        scene_xy = np.stack(np.meshgrid(x, y), axis=-1)
 
-        mask = torch.zeros((GRID_SIZE, GRID_SIZE),
-                           dtype=torch.complex128).to(self.RP.dev)[None, None, ...]
-        mask.view(-1)[self.RP.circle_indeces] = 1
+        scene_xy = torch.from_numpy(scene_xy).to(self.device).double()
 
-        x_real = x[..., 0].squeeze()
-        x_imag = x[..., 1].squeeze()
-        print(x_real.shape)
-        print(x_real[GRID_SIZE // 2, GRID_SIZE // 2])
+        loss_fn_alex = lpips.LPIPS(net='alex').double().to(self.device)
+
+        if self.circular:
+            mask = torch.zeros((x_shape, y_shape),
+                               dtype=torch.complex128).to(self.device)[None, None, ...]
+            mask.view(-1)[self.ind] = 1
+
+        x_real = scene_xy[..., 0].squeeze()
+        x_imag = scene_xy[..., 1].squeeze()
+
         x_complex = torch.complex(real=x_real, imag=x_imag)[None, None,
                                                             ...].requires_grad_()
 
@@ -65,22 +77,30 @@ class GradDescRecon:
         for epoch in range(0, max_iter):
             optimizer.zero_grad()
 
-            x_complex_circle = x_complex * mask
+            if self.circular:
+                _x_complex = x_complex * mask
+            else:
+                _x_complex = x_complex
 
-            x_conv_real = torch.nn.functional.conv2d(x_complex_circle.real, psf.real,
+            x_conv_real = torch.nn.functional.conv2d(_x_complex.real, psf.real,
                                                      padding='same').squeeze()
-            x_conv_imag = torch.nn.functional.conv2d(x_complex_circle.imag, psf.real,
+            x_conv_imag = torch.nn.functional.conv2d(_x_complex.imag, psf.real,
                                                      padding='same').squeeze()
 
             pred = torch.complex(real=x_conv_real, imag=x_conv_imag)
-            pred_sub = pred.view(-1)[self.RP.circle_indeces]
-            pred_norm = pred_sub / torch.sqrt(self.energy(pred_sub))
 
-            reg_term = reg_weight * reg_fn(x_complex_circle.abs().squeeze())
+            if self.circular:
+                _pred = pred.view(-1)[self.ind]
+                __pred = _pred / torch.sqrt(self.energy(_pred))
+            else:
+                _pred = pred.view(-1)
+                __pred = _pred / torch.sqrt(self.energy(_pred))
 
-            loss = torch.nn.functional.mse_loss(pred_norm.real, y.real,
+            reg_term = reg_weight * reg_fn(_x_complex.abs().squeeze())
+
+            loss = torch.nn.functional.mse_loss(__pred.real, target.real,
                                                 reduction='sum') \
-                   + torch.nn.functional.mse_loss(pred_norm.imag, y.imag,
+                   + torch.nn.functional.mse_loss(__pred.imag, target.imag,
                                                   reduction='sum') \
                    + reg_term
 
@@ -88,12 +108,11 @@ class GradDescRecon:
             optimizer.step()
 
             if epoch % save_every == 0 or epoch == max_iter - 1:
-                x = torch.sqrt(x_real ** 2 + x_imag ** 2)
-
                 print("Epoch:", epoch, "\t", "Loss:", loss.item())
 
-                deconv_scene = x.squeeze().detach().cpu().numpy()
-                deconv_scene = c2g(deconv_scene, self.RP.circle_indeces, GRID_SIZE)
+                deconv_scene = _x_complex.abs().squeeze().detach().cpu().numpy()
+
+                deconv_scene = deconv_scene.reshape((x_shape, y_shape))
 
                 images.append(normalize(deconv_scene))
 
@@ -103,9 +122,9 @@ class GradDescRecon:
                     ssim_est = structural_similarity(normalize(gt_img),
                                                      normalize(deconv_scene))
                     gt = torch.from_numpy(self.norm(gt_img.squeeze()))[None, None,
-                                                                       ...].repeat(1, 3, 1, 1).to(self.RP.dev)
+                                                                       ...].repeat(1, 3, 1, 1).to(self.device)
                     est = torch.from_numpy(self.norm(deconv_scene.squeeze()))[None, None,
-                                                                              ...].repeat(1, 3, 1, 1).to(self.RP.dev)
+                                                                              ...].repeat(1, 3, 1, 1).to(self.device)
                     percep = loss_fn_alex(gt, est).item()
 
                     psnrs.append(psnr_est)

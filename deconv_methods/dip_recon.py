@@ -1,15 +1,16 @@
 import torch
 import numpy as np
-import collections
-from sim_csas_package.utils import L1_reg, L2_reg, grad_reg, TV, normalize, save_sas_plot
+from sim_csas_package.utils import normalize, save_sas_plot, g2c
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 import os
 import lpips
 from deconv_methods.dip_dependencies.dip_models import *
+from deconv_methods.dip_dependencies.dip_utils.common_utils import get_noise, get_params
 
 class DIPRecon:
-  def __init__(self, RP):
-    self.RP = RP
+  def __init__(self, device, circular):
+    self.device = device
+    self.circular = circular
 
   def norm(self, x):
     return 2*((x - x.min())/(x.max() - x.min())) - 1
@@ -17,56 +18,33 @@ class DIPRecon:
   def energy(self, x):
     return torch.sum(x.abs()**2)
 
-  def recon(self, max_len, max_iter, reg, reg_weight, save_every, sim, psf, crop_size, gt_img, img,
-      save_name):
-
+  def recon(self, lr, max_iter, save_every, img, psf, gt_img, save_name):
     assert img.dtype == np.complex128
     assert psf.dtype == np.complex128
 
-    assert reg in ['none', 'l1', 'l2', 'grad_reg', 'tv']
+    if self.circular:
+      assert img.shape[0] == img.shape[1], "Image must be square (H == W) to do circular reconstruction."
+      _, ind = g2c(img)
+      img = img.ravel()[ind]
+      self.ind = ind
+    else:
+      img = img.ravel()
 
-    reg_fn = None
+    x_shape, y_shape = gt_img.shape[0], gt_img.shape[1]
 
-    if reg == 'none':
-      reg_fn = lambda x: torch.tensor([0]).to(self.RP.dev).double()
-    elif reg == 'l1':
-      reg_fn = L1_reg
-    elif reg == 'l2':
-      reg_fn = L2_reg
-    elif reg == 'grad_reg':
-      reg_fn = grad_reg
-    elif reg == 'tv':
-      reg_fn = TV
+    psf = torch.from_numpy(psf).to(self.device)[None, None, ...]
+    psf = psf / torch.sqrt(self.energy(psf))
 
-    SAVE_EVERY = save_every
+    target = torch.from_numpy(img).to(self.device)
+    target = target / torch.sqrt(self.energy(target))
 
-    GRID_SIZE = self.RP.pix_dim_bf[0]
-
-    psf = torch.from_numpy(psf).to(self.RP.dev)[None, None, ...]
-    y = torch.from_numpy(img).to(self.RP.dev)
-
-    y = y / torch.sqrt(self.energy(y))
-
-    MAX_LEN = max_len
-    d = collections.deque(maxlen=MAX_LEN)
-    ssim_opt = collections.deque(maxlen=MAX_LEN)
-    psnr_opt = collections.deque(maxlen=MAX_LEN)
-    percep_opt = collections.deque(maxlen=MAX_LEN)
-    images = collections.deque(maxlen=MAX_LEN)
-
-    pw = 1
-
-    loss_fn_alex = lpips.LPIPS(net='alex').double().to(self.RP.dev)
+    loss_fn_alex = lpips.LPIPS(net='alex').double().to(self.device)
 
     #### Initialize DIP model ####
-    weight = 0.0
     input_depth = 32
     pad = 'zeros'
     INPUT = 'noise'
-    exp_weight = 0.99
-    OPTIMIZER = 'adam'
-    # real data 0.5e1
-    LR = 1e-2
+    LR = lr
     OPT_OVER = 'net'
 
     model = get_net(input_depth, 'skip', pad, n_channels=2,
@@ -75,18 +53,24 @@ class DIPRecon:
         skip_n33u=128,
         skip_n11=4,
         num_scales=5,
-        upsample_mode='bilinear', need_sigmoid=False, need_bias=True).double().to(self.RP.dev)
+        upsample_mode='bilinear', need_sigmoid=False, need_bias=True).double().to(self.device)
 
-    noise_input = get_noise(input_depth, INPUT, (GRID_SIZE,
-      GRID_SIZE)).double().to(self.RP.dev).detach()
+    noise_input = get_noise(input_depth, INPUT, (x_shape,
+      y_shape)).double().to(self.device).detach()
 
     optimizer = torch.optim.Adam(get_params(OPT_OVER, model, noise_input), lr=LR)
 
-    mask = torch.zeros((GRID_SIZE, GRID_SIZE),
-        dtype=torch.complex128).to(self.RP.dev) 
-    mask.view(-1)[self.RP.circle_indeces] = 1
+    if self.circular:
+      mask = torch.zeros((x_shape, y_shape),
+                         dtype=torch.complex128).to(self.device)[None, None, ...]
+      mask.view(-1)[self.ind] = 1
 
-    for epoch in range(1, 100000000):
+    psnrs = []
+    ssims = []
+    perceps = []
+    images = []
+
+    for epoch in range(1, max_iter):
       optimizer.zero_grad()
 
       x = model(noise_input).squeeze()
@@ -95,100 +79,64 @@ class DIPRecon:
 
       x_complex = torch.complex(real=x_real, imag=x_imag)[None, None, ...]
 
-      x_complex_circle = mask*x_complex
+      if self.circular:
+        _x_complex = x_complex * mask
+      else:
+        _x_complex = x_complex
 
-      x_conv_real = torch.nn.functional.conv2d(x_complex_circle.real, psf.real,
+      x_conv_real = torch.nn.functional.conv2d(_x_complex.real, psf.real,
           padding='same').squeeze()
-      x_conv_imag = torch.nn.functional.conv2d(x_complex_circle.imag, psf.real,
+      x_conv_imag = torch.nn.functional.conv2d(_x_complex.imag, psf.real,
           padding='same').squeeze()
-
 
       pred = torch.complex(real=x_conv_real, imag=x_conv_imag)
-      pred = pred.view(-1)[self.RP.circle_indeces]
-      pred = pred / torch.sqrt(self.energy(pred))
 
-      pixel_loss = torch.nn.functional.mse_loss(pred.real, y.real,
-        reduction='sum') + torch.nn.functional.mse_loss(pred.imag, y.imag, 
-            reduction='sum')
+      if self.circular:
+        _pred = pred.view(-1)[self.ind]
+        __pred = _pred / torch.sqrt(self.energy(_pred))
+      else:
+        _pred = pred.view(-1)
+        __pred = _pred / torch.sqrt(self.energy(_pred))
 
-      loss = pixel_loss
+      loss = torch.nn.functional.mse_loss(__pred.real, target.real,
+                                          reduction='sum') \
+             + torch.nn.functional.mse_loss(__pred.imag, target.imag,
+                                            reduction='sum')
 
       loss.backward()
       optimizer.step()
 
-      if epoch % SAVE_EVERY == 0:
+      if epoch % save_every == 0 or epoch == max_iter - 1:
+        print("Epoch:", epoch, "\t", "Loss:", loss.item())
 
-        x = torch.sqrt(x_complex_circle.real**2 + x_complex_circle.imag**2)
+        deconv_scene = _x_complex.abs().squeeze().detach().cpu().numpy()
 
-        deconv_scene = x.squeeze().detach().cpu().numpy()
+        deconv_scene = deconv_scene.reshape((x_shape, y_shape))
 
-        print("Epoch:", epoch, "\t", "Loss:", pixel_loss.item())
+        images.append(normalize(deconv_scene))
 
-        
-        if crop_size:
-          deconv_scene = deconv_scene[crop_size//2:-crop_size//2,
-            crop_size//2:-crop_size//2]
-
-        if sim:
-
-          save_sas_plot(deconv_scene, os.path.join('tmp', 'deconv_scene'
-            + str(epoch) + '.png'))
-
-          images.append(normalize(deconv_scene))
-
-          #imwrite(deconv_scene, os.path.join('plots_200/deconv_scene' + str(epoch)
-          #  + '.png'))
-          pred = np.absolute(pred.squeeze().detach().cpu().numpy())
-          #imwrite(pred, os.path.join('plots/pred' + str(epoch) + '.png'))
-
+        if gt_img is not None:
           psnr_est = peak_signal_noise_ratio(normalize(gt_img),
-              normalize(deconv_scene))
-
+                                             normalize(deconv_scene))
           ssim_est = structural_similarity(normalize(gt_img),
-              normalize(deconv_scene))
-         
+                                           normalize(deconv_scene))
           gt = torch.from_numpy(self.norm(gt_img.squeeze()))[None, None,
-              ...].repeat(1, 3, 1, 1).to(self.RP.dev)
+                                                             ...].repeat(1, 3, 1, 1).to(self.device)
           est = torch.from_numpy(self.norm(deconv_scene.squeeze()))[None, None,
-              ...].repeat(1, 3, 1, 1).to(self.RP.dev)
-
+                                                                    ...].repeat(1, 3, 1, 1).to(self.device)
           percep = loss_fn_alex(gt, est).item()
+
+          psnrs.append(psnr_est)
+          ssims.append(ssim_est)
+          perceps.append(percep)
 
           print("PSNR EST:", psnr_est, "SSIM:", ssim_est, "Percep:", percep)
 
-          d.append(psnr_est)
-          ssim_opt.append(ssim_est)
-          psnr_opt.append(psnr_est)
-          percep_opt.append(percep)
+        save_sas_plot(deconv_scene, os.path.join(save_name, "deconv_img_" + str(epoch) + '.png'))
+        np.save(os.path.join(save_name, "deconv_img_" + str(epoch) + '.npy'), deconv_scene)
+        np.save(os.path.join(save_name, "complex_DAS_pred_" + str(epoch) + '.npy'), pred.detach().cpu().numpy())
 
-          if len(d) == MAX_LEN:
-            if d[-1] < d[0] or epoch > 2000:
-              val = max(psnr_opt)
-              max_psnr = psnr_opt[psnr_opt.index(val)]
-              max_ssim = ssim_opt[psnr_opt.index(val)]
-              max_percep = percep_opt[psnr_opt.index(val)]
-              deconv_scene = images[psnr_opt.index(val)]
-           
-              #print("Max PSNR", max_psnr)
-              #print("Max SSIM", max_ssim)
-              #print("Max Percep", max_percep)
-              #imwrite(deconv_scene, os.path.join(SAVE_IMG_DIR,
-              #'deconv_inr' + str(count) + '.png'))
-              return max_psnr, max_ssim, max_percep, deconv_scene
-
-        else:
-          if epoch > MAX_LEN:
-            return deconv_scene
-          else:
-            save_sas_plot(deconv_scene, os.path.join(save_name, str(epoch) + '.png'))
-            np.save(os.path.join(save_name, str(epoch) + '.npy'), deconv_scene)
-
-            abs_pred = torch.sqrt(x_conv_real**2
-                + x_conv_imag**2).squeeze().detach().cpu().numpy()
-            save_sas_plot(abs_pred, os.path.join(save_name, 'pred' + str(epoch)
-              + '.png'))
-            np.save(os.path.join(save_name, 'pred' + str(epoch) + '.npy'),
-                abs_pred)
+    return images, psnrs, ssims, perceps
 
 
         

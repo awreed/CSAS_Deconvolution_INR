@@ -48,20 +48,21 @@ def g2c(grid):
   x = np.linspace(-1, 1, grid.shape[0], endpoint=True)
   xy = np.meshgrid(x, x)
   xy = np.stack(xy, axis=-1)
-  mask = np.zeros((grid.shape[0], grid.shape[0]))
+  xy = np.reshape(xy, (-1, 2))
+  mask = np.zeros((grid.shape[0]*grid.shape[0]))
   indeces = np.where(xy[..., 0]**2 + xy[..., 1]**2 <= 1)
   mask[indeces] = 1
+  mask = np.reshape(mask, (grid.shape[0], grid.shape[0]))
   masked_grid = mask*grid
 
   return masked_grid, indeces
 
-def c2g(circle, indeces, size):
+def c2g(circle, indeces, x, y):
   dtype = circle.dtype
-  img = np.zeros(size*size, dtype=dtype)
+  img = np.zeros(x*y, dtype=dtype)
   img[indeces] = circle
-  img = img.reshape(size, size)
+  img = img.reshape(x, y)
   return img
-
 
 
 def save_sas_plot(img, path, x_size=0.2, y_size=0.2, log=False): 
