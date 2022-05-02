@@ -22,9 +22,9 @@ are commented to provide instructions for use. The output
 of the deconvolution methods are saved in the `deconv_dir` directory.
 
 Running the pipeline will generate a results figure in each `deconv_dir/image*` directory showing the deconvolution 
-results of all the methods run on the created dataset. 
+results of all the methods run on the created dataset.
 
-![Image](example_sim_deconv_pipeline\deconv_dir\image0\deconvolution_results.png)
+<img alt="Image" height="175" src="example_sim_deconv_pipeline\deconv_dir\image0\deconvolution_results.png" width="1200"/>
 
 Additionally, one can find bar plots displaying deconvolution metrics for each method.
 
