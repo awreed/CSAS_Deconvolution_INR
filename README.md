@@ -19,8 +19,18 @@ in the paper. The simulation and geometry parameters are modified by editing usi
 `example_sim_deconv_pipeline/system_parameters.ini` and `example_sim_deconv_pipeline/simulation.ini`
 files. The deconvolution parameters can be edited using the `example_sim_deconv_pipeline/deconv.ini`. All `.ini` files
 are commented to provide instructions for use. The output 
-of the deconvolution methods are saved in the `deconv_dir` directory. 
+of the deconvolution methods are saved in the `deconv_dir` directory.
+
+Running the pipeline will generate a results figure in each `deconv_dir/image*` directory showing the deconvolution 
+results of all the methods run on the created dataset. 
+
+![Image](C:\Users\Albert Reed\PycharmProjects\CSAS_Deconvolution\example_sim_deconv_pipeline\deconv_dir\image0\deconvolution_results.png)
+
+Additionally, one can find bar plots displaying deconvolution metrics for each method.
+
+<img height="200" src="C:\Users\Albert Reed\PycharmProjects\CSAS_Deconvolution\example_sim_deconv_pipeline\deconv_dir\image0\psnr_bar_plot.png" width="200"/>
+<img height="200" src="C:\Users\Albert Reed\PycharmProjects\CSAS_Deconvolution\example_sim_deconv_pipeline\deconv_dir\image0\ssim_bar_plot.png" width="200"/>
+<img height="200" src="C:\Users\Albert Reed\PycharmProjects\CSAS_Deconvolution\example_sim_deconv_pipeline\deconv_dir\image0\lpips_bar_plot.png" width="200"/>
 
 
 ## Deconvolving AirSAS data (Coming 5/6/22)
-

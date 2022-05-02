@@ -8,6 +8,13 @@ import cv2
 from PIL import Image
 import torch
 import constants.constants as C
+import re
+
+def atoi(text):
+    return int(text) if text.isdigit() else text
+
+def natural_keys(text):
+    return [ atoi(c) for c in re.split(r'(\d+)', text) ]
 
 def process_sys_config(sys_config):
     A = {}
@@ -88,7 +95,7 @@ def save_sas_plot(img, path, x_size=0.2, y_size=0.2, log=False):
 
 # Crops the PSF down to smaller size based off desired amount of energy
 # (thresh)
-def crop_psf(RP, psf, thresh):
+def crop_psf(psf, thresh):
 
   assert thresh > 0
   assert thresh < 1.0
