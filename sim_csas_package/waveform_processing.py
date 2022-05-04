@@ -33,7 +33,7 @@ def replica_correlate_torch(x, kernel):
         
     return x_rc
 
-
+# set min_dist to RP.min_dist if RP.generate_transmit_signal(crop_wfm=True)
 def delay_waveforms(RP, ps, amplitudes, noise=False, noise_std=.01, temps=None,
     min_dist=0.0, scat_phase=None):
 

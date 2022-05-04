@@ -1,6 +1,5 @@
 import torch
 import configparser
-from sim_csas_package.utils import crop_psf
 import constants.constants as C
 from deconv_methods.inr_recon import INRRecon
 from functools import partial
@@ -111,13 +110,14 @@ class DeconvMethods:
     def process_deconv_config(self):
         for key in self.deconv_config.keys():
             if key in self.all_methods:
-                if self.deconv_config[key] == 'DEFAULT':
+                if key == 'DEFAULT':
                     continue
                 print("Adding", key)
                 self.add_method(key)
             else:
-                print("Method name not recognized in .ini file. User provided", key,
-                    "but possible methods are", self.all_methods)
+                if not key == 'DEFAULT':
+                    print("Method name not recognized in .ini file. User provided", key,
+                        "but possible methods are", self.all_methods)
 
     # Run all the deconv methods on the provided data
     def run_all_methods(self):
@@ -128,7 +128,8 @@ class DeconvMethods:
 
             assert task['scene'].ndim == 2, "DAS (scene) input should be two dimensions (H, W)"
             assert task['psf'].ndim == 2, "PSF input should be two dimensions (H-1, W-1)"
-            assert task['gt'].ndim == 2, "Ground truth image input should be two dimensions (H, W)"
+            if task['gt'] is not None:
+                assert task['gt'].ndim == 2, "Ground truth image input should be two dimensions (H, W)"
 
             if task['gt'] is not None:
                 assert task['scene'].shape == task['gt'].shape, "Provided ground truth image should be same" \
@@ -136,7 +137,8 @@ class DeconvMethods:
             if self.circular:
                 assert task['scene'].shape[0] == task['scene'].shape[1], "DAS Input must be square (H == W) " \
                                                                          "to perform circular crop"
-                assert task['gt'].shape[0] == task['gt'].shape[1], "GT must be square (H == W) " \
+                if task['gt'] is not None:
+                    assert task['gt'].shape[0] == task['gt'].shape[1], "GT must be square (H == W) " \
                                                                    "to perform circular crop"
 
             # loop over all methods to deconvolve with

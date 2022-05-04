@@ -38,7 +38,7 @@ class BremenAlg:
     assert img.dtype == np.complex128
     assert psf.dtype == np.complex128
 
-    x_shape, y_shape = gt_img.shape[0], gt_img.shape[1]
+    x_shape, y_shape = img.shape[0], img.shape[1]
 
     if self.circular:
       assert img.shape[0] == img.shape[1], "Image must be square (H == W) to do circular reconstruction."

@@ -5,14 +5,13 @@ from sim_csas_package import SimulateMeasurements, CreatePSF
 from deconv_methods.deconv_methods import DeconvMethods
 import matplotlib
 import matplotlib.pyplot as plt
-from matplotlib import rc
 import os
 import glob
 from sim_csas_package.utils import natural_keys, normalize
 
 if __name__ == '__main__':
     sim_config = 'config/simulation.ini'
-    sys_config = 'config/system_parameters.ini'
+    sys_config = 'config/system_parameters_20k.ini'
     deconv_config = 'config/deconv.ini'
     save_img_dir = 'sim_images'
     save_data_dir = 'sim_data'

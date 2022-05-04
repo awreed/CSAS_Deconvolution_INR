@@ -1,0 +1,2 @@
+This directory contains the source code for all deconvolution methods. "deconv_methods.py" implements functions
+for queueing all the methods to run on a dataset.

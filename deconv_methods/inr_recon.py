@@ -20,8 +20,10 @@ class INRRecon:
         return torch.sum(x.abs() ** 2)
 
     def recon(self, kappa, nf, lr, max_iter, save_every, img, psf, gt_img, save_name):
-        assert img.dtype == np.complex128
+        assert img.dtype == np.complex128, "Cast DAS input and PSF input to np.complex128 type"
         assert psf.dtype == np.complex128
+
+        x_shape, y_shape = img.shape[0], img.shape[1]
 
         if self.circular:
             assert img.shape[0] == img.shape[1], "Image must be square (H == W) to do circular reconstruction."
@@ -30,8 +32,6 @@ class INRRecon:
             self.ind = ind
         else:
             img = img.ravel()
-
-        x_shape, y_shape = gt_img.shape[0], gt_img.shape[1]
 
         # Reshape the PSF and target variables
         # [1, 1, PSF_H, PSF_W]
@@ -125,11 +125,14 @@ class INRRecon:
                 print("Epoch:", epoch, "\t", "Loss:", loss.item())
 
                 deconv_scene = x.squeeze().detach().cpu().numpy()
+                pred = pred.squeeze().detach().cpu().numpy()
 
                 if self.circular:
                     deconv_scene = c2g(deconv_scene, self.ind, x_shape, y_shape)
+                    pred = c2g(pred, self.ind, x_shape, y_shape)
                 else:
                     deconv_scene = deconv_scene.reshape((x_shape, y_shape))
+                    pred = pred.reshape((x_shape, y_shape))
 
                 images.append(normalize(deconv_scene))
 
@@ -151,7 +154,9 @@ class INRRecon:
                     print("PSNR EST:", psnr_est, "SSIM:", ssim_est, "Percep:", percep)
 
                 save_sas_plot(deconv_scene, os.path.join(save_name, "deconv_img_" + str(epoch) + '.png'))
+                save_sas_plot(np.abs(pred), os.path.join(save_name, "complex_DAS_pred_" +
+                                                                                str(epoch) + '.png'))
                 np.save(os.path.join(save_name, "deconv_img_" + str(epoch) + '.npy'), deconv_scene)
-                np.save(os.path.join(save_name, "complex_DAS_pred_" + str(epoch) + '.npy'), pred.detach().cpu().numpy())
+                np.save(os.path.join(save_name, "complex_DAS_pred_" + str(epoch) + '.npy'), pred)
 
         return images, psnrs, ssims, perceps

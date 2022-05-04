@@ -41,7 +41,7 @@ class WienerDeconv:
     assert img.dtype == np.complex128
     assert psf.dtype == np.complex128
 
-    x_shape, y_shape = gt_img.shape[0], gt_img.shape[1]
+    x_shape, y_shape = img.shape[0], img.shape[1]
 
     if psf.shape != img.shape:
       print("Wiener filter padding code might be wrong for non-square PSFs...")

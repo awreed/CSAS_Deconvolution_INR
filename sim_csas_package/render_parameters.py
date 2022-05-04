@@ -129,6 +129,7 @@ class RenderParameters:
         self.min_dist = min(min_dist) - .05 # (m)
         self.max_dist = max(max_dist) + .05 # (m)
 
+
         assert self.max_dist > self.min_dist
 
         t_dur = (self.max_dist - self.min_dist) / self.c
@@ -138,8 +139,7 @@ class RenderParameters:
         self.num_samples = 1000
         self.min_dist = 0.0
 
-      if not wfm:
-          print("using the analytic transmit waveform")
+      if wfm is not None:
           times = np.linspace(self.t_start, self.t_stop - 1 / self.Fs, num=int((self.t_stop - self.t_start) * self.Fs))
           LFM = scipy.signal.chirp(times, self.f_start, self.t_stop, self.f_stop)  # Generate LFM chirp
 
@@ -148,9 +148,7 @@ class RenderParameters:
 
           ind1 = 0  # Not supporting staring time other than zero atm
           ind2 = ind1 + len(LFM)
-            
-          # If scene smaller than transmit signal length
-          self.num_samples = self.num_samples + 2*len(LFM)
+
           #print("Num samples", self.num_samples)
           sig = np.full(int(self.num_samples), 1e-8)
 
@@ -158,8 +156,8 @@ class RenderParameters:
       else:
           sig = np.full(int(self.num_samples), 1e-8)
 
-          sig[:len(wfm)] = np.array(wfm).squeeze()
-          LFM = np.array(wfm).squeeze()
+          sig[:len(wfm)] = wfm.squeeze()
+          LFM = wfm.squeeze()
 
       sig = torch.from_numpy(sig)
 

@@ -1,0 +1,19 @@
+Speaker x,0.000000E+0
+Speaker y,-848.500000E-3
+Speaker z,285.000000E-3
+Mic1 x,0.000000E+0
+Mic1 y,-861.500000E-3
+Mic1 z,247.000000E-3
+Mic2 x,0.000000E+0
+Mic2 y,-861.500000E-3
+Mic2 z,216.000000E-3
+Center x,0.000000E+0
+Center y,0.000000E+0
+Center z,177.500000E-3
+Fs,100.000000E+3
+Group Delay,62.329317E+0
+Input Range,0.000000E+0
+Output Range,3.500000E+0
+Input Device,USB-4431
+Output Device,USB-4431
+Bit Depth,24

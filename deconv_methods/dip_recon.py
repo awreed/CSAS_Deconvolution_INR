@@ -22,6 +22,8 @@ class DIPRecon:
     assert img.dtype == np.complex128
     assert psf.dtype == np.complex128
 
+    x_shape, y_shape = img.shape[0], img.shape[1]
+
     if self.circular:
       assert img.shape[0] == img.shape[1], "Image must be square (H == W) to do circular reconstruction."
       _, ind = g2c(img)
@@ -29,8 +31,6 @@ class DIPRecon:
       self.ind = ind
     else:
       img = img.ravel()
-
-    x_shape, y_shape = gt_img.shape[0], gt_img.shape[1]
 
     psf = torch.from_numpy(psf).to(self.device)[None, None, ...]
     psf = psf / torch.sqrt(self.energy(psf))
