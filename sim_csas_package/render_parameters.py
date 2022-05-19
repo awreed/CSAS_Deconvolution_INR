@@ -139,7 +139,7 @@ class RenderParameters:
         self.num_samples = 1000
         self.min_dist = 0.0
 
-      if wfm is not None:
+      if wfm is None:
           times = np.linspace(self.t_start, self.t_stop - 1 / self.Fs, num=int((self.t_stop - self.t_start) * self.Fs))
           LFM = scipy.signal.chirp(times, self.f_start, self.t_stop, self.f_stop)  # Generate LFM chirp
 

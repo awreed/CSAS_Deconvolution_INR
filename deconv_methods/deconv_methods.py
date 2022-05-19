@@ -9,6 +9,7 @@ import numpy as np
 from deconv_methods.wiener_filter import WienerDeconv
 from deconv_methods.bremen_alg import BremenAlg
 from deconv_methods.dip_recon import DIPRecon
+from sim_csas_package.utils import save_sas_plot
 
 
 class DeconvMethods:
@@ -126,6 +127,7 @@ class DeconvMethods:
             save_dir = os.path.join(self.deconv_dir, 'image' + str(i))
             os.makedirs(save_dir, exist_ok=True)
 
+
             assert task['scene'].ndim == 2, "DAS (scene) input should be two dimensions (H, W)"
             assert task['psf'].ndim == 2, "PSF input should be two dimensions (H-1, W-1)"
             if task['gt'] is not None:
@@ -140,6 +142,12 @@ class DeconvMethods:
                 if task['gt'] is not None:
                     assert task['gt'].shape[0] == task['gt'].shape[1], "GT must be square (H == W) " \
                                                                    "to perform circular crop"
+            # TODO figure out how to check for generic complex type
+            if task['scene'].dtype == np.complex64:
+                task['scene'] = task['scene'].astype(np.complex128)
+
+            if task['psf'].dtype == np.complex64:
+                task['psf'] = task['psf'].astype(np.complex128)
 
             # loop over all methods to deconvolve with
             for meth in self.use_methods:
@@ -148,6 +156,11 @@ class DeconvMethods:
                 print("Running", meth['name'], "on image", str(i))
 
                 images, psnrs, ssims, lpips = meth['func'](task['scene'], task['psf'], task['gt'], meth_save_dir)
+
+                save_sas_plot(task['gt'], os.path.join(meth_save_dir, 'gt.png'))
+                save_sas_plot(np.abs(task['scene']), os.path.join(meth_save_dir, 'gt_das.png'))
+                save_sas_plot(np.abs(task['psf']), os.path.join(meth_save_dir, 'psf.png'))
+
                 np.save(os.path.join(meth_save_dir, 'final_deconv.npy'), images[-1])
                 np.save(os.path.join(meth_save_dir, 'psnrs.npy'), np.asarray(psnrs))
                 np.save(os.path.join(meth_save_dir, 'ssims.npy'), np.asarray(ssims))

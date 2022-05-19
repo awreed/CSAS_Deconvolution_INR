@@ -38,6 +38,13 @@ class BremenAlg:
     assert img.dtype == np.complex128
     assert psf.dtype == np.complex128
 
+    LPIPS_metric = True
+
+    # Turn off LPIPs metric if dimenions are too small
+    if img.shape[0] < 100 or img.shape[1] < 100:
+      print("Dimensions too small to compute LPIPs metric. Turning LPIPs metric off. ")
+      LPIPS_metric = False
+
     x_shape, y_shape = img.shape[0], img.shape[1]
 
     if self.circular:
@@ -119,15 +126,20 @@ class BremenAlg:
                                              normalize(deconv_scene))
           ssim_est = structural_similarity(normalize(gt_img),
                                            normalize(deconv_scene))
-          gt = torch.from_numpy(self.norm(gt_img.squeeze()))[None, None,
-                                                             ...].repeat(1, 3, 1, 1).to(self.device)
-          est = torch.from_numpy(self.norm(deconv_scene.squeeze()))[None, None,
-                                                                    ...].repeat(1, 3, 1, 1).to(self.device)
-          percep = loss_fn_alex(gt, est).item()
+
+          if LPIPS_metric:
+            gt = torch.from_numpy(self.norm(gt_img.squeeze()))[None, None,
+                                                               ...].repeat(1, 3, 1, 1).to(self.device)
+            est = torch.from_numpy(self.norm(deconv_scene.squeeze()))[None, None,
+                                                                      ...].repeat(1, 3, 1, 1).to(self.device)
+
+            percep = loss_fn_alex(gt, est).item()
+            perceps.append(percep)
+          else:
+            percep = "NaN"
 
           psnrs.append(psnr_est)
           ssims.append(ssim_est)
-          perceps.append(percep)
 
           print("PSNR EST:", psnr_est, "SSIM:", ssim_est, "Percep:", percep)
 

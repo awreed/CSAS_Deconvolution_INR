@@ -13,10 +13,12 @@ from sim_csas_package.utils import process_sys_config
 class SimulateMeasurements:
     def __init__(self, sim_config, sys_config, save_img_dir, save_data_dir):
         self.sim_config = configparser.ConfigParser()
-        self.sim_config.read(sim_config)
+        cond = self.sim_config.read(sim_config)
+        assert sim_config in cond, "Failed to read simulation config (is path correct)"
 
         self.sys_config = configparser.ConfigParser()
-        self.sys_config.read(sys_config)
+        cond1 = self.sys_config.read(sys_config)
+        assert sys_config in cond1, "Failed to read system config file (is path correct?)"
 
         self.save_img_dir = save_img_dir
         self.save_data_dir = save_data_dir

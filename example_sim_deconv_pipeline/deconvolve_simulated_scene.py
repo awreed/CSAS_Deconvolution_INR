@@ -11,7 +11,7 @@ from sim_csas_package.utils import natural_keys, normalize
 
 if __name__ == '__main__':
     sim_config = 'config/simulation.ini'
-    sys_config = 'config/system_parameters_20k.ini'
+    sys_config = 'config/system_parameters.ini'
     deconv_config = 'config/deconv.ini'
     save_img_dir = 'sim_images'
     save_data_dir = 'sim_data'

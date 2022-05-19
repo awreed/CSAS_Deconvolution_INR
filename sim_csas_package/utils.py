@@ -80,15 +80,9 @@ def save_sas_plot(img, path, x_size=0.2, y_size=0.2, log=False):
     plt.colorbar(label='dB')
     plt.clim(vmin=-30, vmax=0) 
   else:
-    plt.imshow(img, extent=[-y_size, y_size, -y_size, y_size])
+    plt.imshow(img)
     plt.colorbar()
 
-  ax = plt.gca()
-  ticks = np.around(np.arange(-x_size, x_size, .04), decimals=2)
-  ax.set_xticks(ticks)
-  ax.set_yticks(ticks)
-  plt.xlabel('m')
-  plt.ylabel('m')
   plt.show()
   plt.savefig(path)
 
